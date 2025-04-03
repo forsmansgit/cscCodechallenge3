@@ -5,6 +5,8 @@ from psycopg.rows import dict_row
 from dotenv import load_dotenv
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from datetime import date
 # ports: 8150 - 8159
 PORT=8151
 
@@ -16,6 +18,25 @@ conn = psycopg.connect(DB_URL, autocommit=True, row_factory=dict_row)
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
+#datamodell som ska valideras
+class booking(BaseModel):
+    guest_id: int
+    room_id: int
+    datefrom: date
+    dateto: date
+
+@app.get("/if/{user_input}")
+def if_(user_input: str):
+    message = None # same as Null
+    if user_input == "hello":
+        message = "Hello, world!"
+    elif user_input == "goodbye":
+        message = "Goodbye, world!"
+    else:
+        message = f"Unknown input: {user_input}"
+        
+    return {"msg": message}
+
 @app.get("/hotel_rooms")
 def hotel_rooms():
     with conn.cursor() as cur:
@@ -23,53 +44,34 @@ def hotel_rooms():
         hotel_rooms = cur.fetchall()
         return hotel_rooms
 
-@app.get("/temp")
-def temp():
-    with conn.cursor() as cur:
-        cur.execute("SELECT * FROM messages")
-        messages = cur.fetchall()
-        return messages
-
-rooms =  [
-
-    {
-        "room" : 1001,
-        "class": "A",
-        "price": 150
-    },
-    
-    {
-        "room" : 1002,
-        "class": "B",
-        "price": 90
-    },
-    
-    { 
-        "room" : 1003,
-        "class": "C",
-        "price": 70
-    }
-
-]
+#@app.get("/temp")
+#def temp():
+#    with conn.cursor() as cur:
+#        cur.execute("SELECT * FROM hotel_rooms ORDER BY room_number")
+#        rooms = cur.fetchall()
+#        return rooms
 
 # Get all rooms
-@app.get("/rooms")
-def get_all_rooms():
-
-    return rooms
-
-# Get one room
 @app.get("/rooms/{id}")
 def get_one_room(id: int):
-    try:
-        return rooms[id]
-    except:
-        return {"error": "Room not found"}
-
-# 
+    with conn.cursor() as cur:
+        cur.execute("SELECT * FROM hotel_rooms WHERE id = %s", [id])
+        #cur.execute("SELECT * FROM hotel_rooms WHERE %s", (id,))
+        #cur.execute("SELECT * FROM hotel_rooms WHERE iid = %(id)s", {"id": id})
+        rooms = cur.fetchall()
+        return rooms
+    
+# bookings
 @app.post("/bookings")
-def create_booking(request: Request):
-    return { "msg": "Booking created successfully" }
+def create_booking(booking: booking):
+    with conn.cursor() as cur:
+        cur.execute("""INSERT INTO hotel_bookings (guest_id, room_id, datefrom, dateto) 
+        VALUES (%s,%s, %s, %s) 
+        RETURNING id""", 
+        (booking.guest_id, booking.room_id, booking.datefrom, booking.dateto))
+        booking_id = cur.fetchone()['id']
+    return {"msg": "Booking Created", "booking_id": booking_id}
+
 
 if __name__ == "__main__":
     uvicorn.run(
