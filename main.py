@@ -24,6 +24,7 @@ class booking(BaseModel):
     room_id: int
     datefrom: date
     dateto: date
+    addinfo: str = None
 
 @app.get("/if/{user_input}")
 def if_(user_input: str):
@@ -65,13 +66,26 @@ def get_one_room(id: int):
 @app.post("/bookings")
 def create_booking(booking: booking):
     with conn.cursor() as cur:
-        cur.execute("""INSERT INTO hotel_bookings (guest_id, room_id, datefrom, dateto) 
-        VALUES (%s,%s, %s, %s) 
+        cur.execute("""INSERT INTO hotel_bookings (guest_id, room_id, datefrom, dateto, addinfo)
+        VALUES (%s,%s, %s, %s, %s) 
         RETURNING id""", 
-        (booking.guest_id, booking.room_id, booking.datefrom, booking.dateto))
+        (booking.guest_id, booking.room_id, booking.datefrom, booking.dateto, booking.addinfo))
         booking_id = cur.fetchone()['id']
     return {"msg": "Booking Created", "booking_id": booking_id}
 
+@app.get("/hotel_guests")
+def hotel_guests():
+    with conn.cursor() as cur:
+        cur.execute("SELECT hg.firstname, hg.lastname FROM hotel_guests hg")
+        hotel_guests = cur.fetchall()
+        return hotel_guests
+
+@app.get("/bookings")
+def get_bookings():
+    with conn.cursor() as cur:
+        cur.execute("SELECT hr.room_number, hg.firstname, hg.lastname, hb.datefrom, hb.dateto FROM hotel_bookings hb INNER JOIN hotel_guests hg ON hb.guest_id = hg.id INNER JOIN hotel_rooms hr ON hb.room_id = hr.id ORDER BY hb.datefrom")
+        bookings = cur.fetchall()
+        return bookings
 
 if __name__ == "__main__":
     uvicorn.run(
